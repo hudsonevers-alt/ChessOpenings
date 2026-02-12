@@ -971,6 +971,7 @@ function App() {
 
     // Cancel any in-flight async updates before rewriting board state.
     sessionIdRef.current += 1;
+    const sessionId = sessionIdRef.current;
 
     const nextGame = new Chess();
     for (const uci of moveHistoryUci) {
@@ -1018,6 +1019,28 @@ function App() {
     setMoveCounter((previous) => Math.max(0, previous - undoneUserMoves));
     setLastMoveReview(null);
     setLastBotMove(getLastBotMoveSan(nextGame, opponentColor(sessionConfig.opening.userColor)));
+
+    if (nextGame.isGameOver()) {
+      setStatus(`Undid the last move. ${describeGameOver(nextGame)}`);
+      return;
+    }
+
+    if (nextGame.turn() !== sessionConfig.opening.userColor) {
+      setStatus("Undid the last move. Bot will move in 0.5 seconds...");
+      const botTurnGame = new Chess(nextGame.fen());
+      const botTurnHistory = [...nextHistory];
+
+      void (async () => {
+        await delay(500);
+
+        if (sessionId !== sessionIdRef.current) {
+          return;
+        }
+
+        await playBotMove(botTurnGame, botTurnHistory, sessionConfig, sessionId);
+      })();
+      return;
+    }
 
     setStatus("Undid the last move. Try again.");
   };
