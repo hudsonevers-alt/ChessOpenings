@@ -61,6 +61,11 @@ interface MoveReview {
   totalGames: number;
 }
 
+interface PreloadedExplorerData {
+  totalGames: number;
+  rankedMoves: RankedMove[];
+}
+
 const HIGH_ELO_RATINGS = "2000,2200,2500";
 const ALTERNATIVE_RATE = 0.1;
 const EXPLORER_RATING_BUCKETS = [400, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
@@ -337,6 +342,14 @@ function getExplorerTotalGames(explorer: ExplorerResponse): number {
   return explorer.moves.reduce((sum, move) => sum + move.white + move.draws + move.black, 0);
 }
 
+function buildExplorerCacheKey(
+  moveHistoryUci: string[],
+  ratings: string,
+  speed: SpeedOption,
+): string {
+  return `${speed}|${ratings}|${moveHistoryUci.join(",")}`;
+}
+
 function interpolateLogScale(
   value: number,
   lowGames: number,
@@ -484,6 +497,8 @@ function App() {
   const sessionIdRef = useRef(0);
   const brilliantHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openingSearchResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const explorerDataCacheRef = useRef<Map<string, PreloadedExplorerData>>(new Map());
+  const explorerRequestCacheRef = useRef<Map<string, Promise<PreloadedExplorerData>>>(new Map());
 
   const selectedOpening = OPENINGS.find((opening) => opening.id === selectedOpeningId) ?? OPENINGS[0];
   const filteredOpenings = OPENINGS.filter((opening) =>
@@ -562,9 +577,51 @@ function App() {
     }
   };
 
+  const getPreloadedExplorerData = async (
+    history: string[],
+    ratings: string,
+    speed: SpeedOption,
+  ): Promise<PreloadedExplorerData> => {
+    const cacheKey = buildExplorerCacheKey(history, ratings, speed);
+    const cached = explorerDataCacheRef.current.get(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
+    const inFlight = explorerRequestCacheRef.current.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const request = fetchExplorerMoves(history, ratings, speed)
+      .then((explorer) => {
+        const preloaded: PreloadedExplorerData = {
+          totalGames: getExplorerTotalGames(explorer),
+          rankedMoves: buildRankedMoves(explorer),
+        };
+        explorerDataCacheRef.current.set(cacheKey, preloaded);
+        return preloaded;
+      })
+      .finally(() => {
+        explorerRequestCacheRef.current.delete(cacheKey);
+      });
+
+    explorerRequestCacheRef.current.set(cacheKey, request);
+    return request;
+  };
+
   useEffect(() => {
     if (!sessionConfig) {
       setPositionGames2000Plus(null);
+      setPositionGamesLoading(false);
+      return;
+    }
+
+    const cacheKey = buildExplorerCacheKey(moveHistoryUci, HIGH_ELO_RATINGS, sessionConfig.speed);
+    const cachedPosition = explorerDataCacheRef.current.get(cacheKey);
+    if (cachedPosition) {
+      setPositionGames2000Plus(cachedPosition.totalGames);
       setPositionGamesLoading(false);
       return;
     }
@@ -573,13 +630,13 @@ function App() {
     let cancelled = false;
     setPositionGamesLoading(true);
 
-    void fetchExplorerMoves(moveHistoryUci, HIGH_ELO_RATINGS, sessionConfig.speed)
-      .then((explorer) => {
+    void getPreloadedExplorerData(moveHistoryUci, HIGH_ELO_RATINGS, sessionConfig.speed)
+      .then((preloaded) => {
         if (cancelled || sessionId !== sessionIdRef.current) {
           return;
         }
 
-        setPositionGames2000Plus(getExplorerTotalGames(explorer));
+        setPositionGames2000Plus(preloaded.totalGames);
       })
       .catch(() => {
         if (cancelled || sessionId !== sessionIdRef.current) {
@@ -628,6 +685,8 @@ function App() {
 
   const clearSessionState = (nextStatus: string): void => {
     sessionIdRef.current += 1;
+    explorerDataCacheRef.current.clear();
+    explorerRequestCacheRef.current.clear();
     setSessionConfig(null);
     setGame(new Chess());
     setMoveHistoryUci([]);
@@ -753,19 +812,25 @@ function App() {
     config: SessionConfig,
     sessionId: number,
   ): Promise<void> => {
-    setStatus("Scoring your move using 2000+ games...");
+    const cacheKey = buildExplorerCacheKey(beforeMoveHistory, HIGH_ELO_RATINGS, config.speed);
+    const cachedReview = explorerDataCacheRef.current.get(cacheKey);
+
+    if (!cachedReview) {
+      setStatus("Scoring your move using 2000+ games...");
+    }
 
     try {
-      const explorer = await fetchExplorerMoves(beforeMoveHistory, HIGH_ELO_RATINGS, config.speed);
+      const preloaded = cachedReview
+        ? cachedReview
+        : await getPreloadedExplorerData(beforeMoveHistory, HIGH_ELO_RATINGS, config.speed);
 
       if (sessionId !== sessionIdRef.current) {
         return;
       }
 
-      recordAccuracySample(getExplorerTotalGames(explorer));
+      recordAccuracySample(preloaded.totalGames);
 
-      const rankedMoves = buildRankedMoves(explorer);
-      const review = buildMoveReview(rankedMoves, userMove, config.opening.userColor);
+      const review = buildMoveReview(preloaded.rankedMoves, userMove, config.opening.userColor);
       setLastMoveReview(review);
       if (review.grade === "!!") {
         flashBrilliantSquare(userMove.to as Square);
@@ -824,18 +889,25 @@ function App() {
     }
 
     const sessionId = sessionIdRef.current;
+    const cacheKey = buildExplorerCacheKey(moveHistoryUci, HIGH_ELO_RATINGS, sessionConfig.speed);
+    const hasCachedHint = explorerDataCacheRef.current.has(cacheKey);
     setHintLoading(true);
-    setStatus("Loading hint from 2000+ games...");
+    if (!hasCachedHint) {
+      setStatus("Loading hint from 2000+ games...");
+    }
 
     try {
-      const explorer = await fetchExplorerMoves(moveHistoryUci, HIGH_ELO_RATINGS, sessionConfig.speed);
+      const preloaded = await getPreloadedExplorerData(
+        moveHistoryUci,
+        HIGH_ELO_RATINGS,
+        sessionConfig.speed,
+      );
 
       if (sessionId !== sessionIdRef.current) {
         return;
       }
 
-      const rankedMoves = buildRankedMoves(explorer);
-      const bestMove = rankedMoves[0];
+      const bestMove = preloaded.rankedMoves[0];
 
       if (!bestMove) {
         setHintMove(null);
@@ -873,6 +945,8 @@ function App() {
 
     sessionIdRef.current += 1;
     const sessionId = sessionIdRef.current;
+    explorerDataCacheRef.current.clear();
+    explorerRequestCacheRef.current.clear();
 
     setSessionConfig(config);
     setGame(new Chess());
