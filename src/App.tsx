@@ -780,6 +780,10 @@ function App() {
         return;
       }
 
+      if (nextGame.turn() === config.opening.userColor) {
+        void getPreloadedExplorerData(nextHistory, HIGH_ELO_RATINGS, config.speed).catch(() => {});
+      }
+
       if (usedFallbackPool) {
         setStatus(
           `${moveRateMessage} No move was above ${formatPercentValue(
@@ -1013,6 +1017,7 @@ function App() {
     }
 
     if (seededGame.turn() === config.opening.userColor) {
+      void getPreloadedExplorerData(seededHistory, HIGH_ELO_RATINGS, config.speed).catch(() => {});
       setStatus("Practice started. Your move.");
       return;
     }
@@ -1116,6 +1121,7 @@ function App() {
       return;
     }
 
+    void getPreloadedExplorerData(nextHistory, HIGH_ELO_RATINGS, sessionConfig.speed).catch(() => {});
     setStatus("Undid the last move. Try again.");
   };
 
