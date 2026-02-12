@@ -1103,7 +1103,6 @@ function App() {
   const canUndo =
     Boolean(sessionConfig) &&
     !isSeeding &&
-    !botThinking &&
     !hintLoading &&
     moveHistoryUci.length > (sessionConfig?.opening.seedMoves.length ?? 0);
   const canReset = Boolean(sessionConfig) || moveHistoryUci.length > 0;
