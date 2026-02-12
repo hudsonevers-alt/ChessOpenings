@@ -337,22 +337,65 @@ function getExplorerTotalGames(explorer: ExplorerResponse): number {
   return explorer.moves.reduce((sum, move) => sum + move.white + move.draws + move.black, 0);
 }
 
-function accuracyFromGames(totalGames: number): number {
-  if (totalGames <= 10) {
-    return 0;
+function interpolateLogScale(
+  value: number,
+  lowGames: number,
+  highGames: number,
+  lowPercent: number,
+  highPercent: number,
+): number {
+  const clampedValue = Math.min(highGames, Math.max(lowGames, value));
+  const lowLog = Math.log10(lowGames);
+  const highLog = Math.log10(highGames);
+  const valueLog = Math.log10(clampedValue);
+
+  if (highLog === lowLog) {
+    return highPercent;
   }
 
+  const ratio = (valueLog - lowLog) / (highLog - lowLog);
+  return lowPercent + ratio * (highPercent - lowPercent);
+}
+
+function accuracyFromGames(totalGames: number): number {
   if (totalGames >= 10000) {
     return 100;
   }
 
-  // Calibrated so 1000 games maps to ~80%.
-  const exponent = Math.log(5) / 990;
-  const denominator = 1 - Math.exp(-exponent * (10000 - 10));
-  const numerator = 1 - Math.exp(-exponent * (totalGames - 10));
-  const normalized = denominator > 0 ? numerator / denominator : 0;
+  if (totalGames >= 1000) {
+    return interpolateLogScale(totalGames, 1000, 10000, 50, 100);
+  }
 
-  return Math.min(100, Math.max(0, normalized * 100));
+  if (totalGames >= 100) {
+    return interpolateLogScale(totalGames, 100, 1000, 25, 50);
+  }
+
+  if (totalGames >= 11) {
+    // Keep 11 games below 1% and scale smoothly up to 25% at 100 games.
+    return interpolateLogScale(totalGames, 11, 100, 0.99, 25);
+  }
+
+  if (totalGames <= 10) {
+    return 1;
+  }
+
+  return 100;
+}
+
+function formatPositionAccuracyLabel(totalGames: number | null, accuracyPercent: number): string {
+  if (totalGames === null) {
+    return "100%";
+  }
+
+  if (totalGames <= 10) {
+    return ">1%";
+  }
+
+  if (accuracyPercent < 1) {
+    return "<1%";
+  }
+
+  return `${formatPercentValue(accuracyPercent)}%`;
 }
 
 function getLastBotMoveSan(currentGame: Chess, botColor: PlayerColor): string {
@@ -1049,6 +1092,24 @@ function App() {
         ? "grade-alternative"
         : "grade-miss";
   const topFiveMoves = lastMoveReview?.rankedMoves.slice(0, 5) ?? [];
+  const positionAccuracyPercent =
+    positionGames2000Plus === null ? 100 : accuracyFromGames(positionGames2000Plus);
+  const positionAccuracyLabel = formatPositionAccuracyLabel(
+    positionGames2000Plus,
+    positionAccuracyPercent,
+  );
+  const positionAccuracyBarPercent = Math.min(100, Math.max(1, positionAccuracyPercent));
+  const positionAccuracyHue = (positionAccuracyBarPercent / 100) * 120;
+  const positionAccuracyBarStyle: CSSProperties = {
+    width: `${positionAccuracyBarPercent}%`,
+    backgroundColor: `hsl(${positionAccuracyHue} 78% 42%)`,
+  };
+  const positionAccuracyGamesLabel =
+    positionGamesLoading && positionGames2000Plus === null
+      ? "Loading sample..."
+      : positionGames2000Plus !== null
+        ? `${positionGames2000Plus.toLocaleString()} games`
+        : "Awaiting position sample";
 
   return (
     <main
@@ -1304,14 +1365,16 @@ function App() {
                 ? `Plays ${(lastBotMoveRate * 100).toFixed(1)}% at your elo`
                 : status || "Play to begin"}
             </span>
-            <span className="position-games-count">
-              2000+ games:{" "}
-              {positionGamesLoading
-                ? "..."
-                : positionGames2000Plus !== null
-                  ? positionGames2000Plus.toLocaleString()
-                  : "-"}
-            </span>
+            <div className="position-accuracy">
+              <div className="position-accuracy-header">
+                <span className="position-accuracy-title">Position accuracy</span>
+                <strong className="position-accuracy-value">{positionAccuracyLabel}</strong>
+              </div>
+              <div className="position-accuracy-bar" aria-hidden="true">
+                <div className="position-accuracy-fill" style={positionAccuracyBarStyle} />
+              </div>
+              <span className="position-accuracy-sample">{positionAccuracyGamesLabel}</span>
+            </div>
           </div>
         </div>
       </section>

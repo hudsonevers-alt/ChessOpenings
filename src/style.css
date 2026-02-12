@@ -457,10 +457,51 @@ body {
   font-size: 1.2rem;
 }
 
-.position-games-count {
-  font-size: 0.84rem;
-  color: #3b5b4d;
+.position-accuracy {
   align-self: end;
+  display: grid;
+  gap: 0.26rem;
+  min-width: min(240px, 100%);
+}
+
+.position-accuracy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.position-accuracy-title {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #3b5b4d;
+}
+
+.position-accuracy-value {
+  font-size: 0.95rem;
+  color: #173126;
+}
+
+.position-accuracy-bar {
+  height: 0.52rem;
+  width: 100%;
+  border-radius: 999px;
+  border: 1px solid rgba(24, 58, 44, 0.2);
+  background: #d8e7de;
+  overflow: hidden;
+}
+
+.position-accuracy-fill {
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  transition: width 240ms ease, background-color 240ms ease;
+}
+
+.position-accuracy-sample {
+  font-size: 0.78rem;
+  color: #486355;
 }
 
 @media (max-width: 880px) {
