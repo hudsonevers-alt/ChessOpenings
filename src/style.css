@@ -437,10 +437,18 @@ body {
   gap: 0.2rem;
 }
 
+.top-moves-list li {
+  min-height: 1.2em;
+}
+
 .top-move-played {
   background: rgba(15, 118, 110, 0.12);
   border-radius: 8px;
   padding: 0.1rem 0.3rem;
+}
+
+.top-move-placeholder {
+  color: #6f877a;
 }
 
 .bot-side-panel {

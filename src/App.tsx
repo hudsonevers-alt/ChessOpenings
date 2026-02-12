@@ -1092,6 +1092,7 @@ function App() {
         ? "grade-alternative"
         : "grade-miss";
   const topFiveMoves = lastMoveReview?.rankedMoves.slice(0, 5) ?? [];
+  const topFiveMoveRows = Array.from({ length: 5 }, (_, index) => topFiveMoves[index] ?? null);
   const positionAccuracyPercent =
     positionGames2000Plus === null ? 100 : accuracyFromGames(positionGames2000Plus);
   const positionAccuracyLabel = formatPositionAccuracyLabel(
@@ -1346,14 +1347,20 @@ function App() {
             <span className="review-title">Move review</span>
             <span className={`review-grade ${reviewGradeClass}`}>{lastMoveReview?.grade ?? "-"}</span>
             <ol className="top-moves-list">
-              {topFiveMoves.map((entry) => (
-                <li
-                  key={entry.uci}
-                  className={lastMoveReview?.playedRank === entry.rank ? "top-move-played" : undefined}
-                >
-                  {entry.san} ({formatRate(entry.rate)})
-                </li>
-              ))}
+              {topFiveMoveRows.map((entry, index) =>
+                entry ? (
+                  <li
+                    key={entry.uci}
+                    className={lastMoveReview?.playedRank === entry.rank ? "top-move-played" : undefined}
+                  >
+                    {entry.san} ({formatRate(entry.rate)})
+                  </li>
+                ) : (
+                  <li key={`placeholder-${index}`} className="top-move-placeholder">
+                    -
+                  </li>
+                ),
+              )}
             </ol>
           </div>
 
