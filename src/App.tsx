@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { Chess, type Move, type Square } from "chess.js";
 import { Chessboard, type PieceDropHandlerArgs } from "react-chessboard";
 import { OPENINGS, type OpeningPreset, type PlayerColor } from "./openings";
@@ -72,6 +72,7 @@ const EXPLORER_RATING_BUCKETS = [400, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 
 const BOT_MOVE_DELAY_MS = 1100;
 const BRILLIANT_FLASH_MS = 1100;
 const OPENING_SEARCH_RESET_MS = 20000;
+const FEEDBACK_EMAIL_ENDPOINT = "https://formsubmit.co/ajax/hudsonevers@gmail.com";
 
 function normalizeCastlingUci(uci: string): string {
   const normalized = uci.toLowerCase();
@@ -411,18 +412,6 @@ function formatPositionAccuracyLabel(totalGames: number | null, accuracyPercent:
   return `${formatPercentValue(accuracyPercent)}%`;
 }
 
-function getLastBotMoveSan(currentGame: Chess, botColor: PlayerColor): string {
-  const history = currentGame.history({ verbose: true }) as Move[];
-
-  for (let index = history.length - 1; index >= 0; index -= 1) {
-    if (history[index].color === botColor) {
-      return history[index].san;
-    }
-  }
-
-  return "";
-}
-
 function buildRatingsFilterFromTargetElo(targetElo: number): string {
   const rangeMin = Math.max(400, targetElo - 200);
   const rangeMax = Math.min(3200, targetElo + 200);
@@ -463,6 +452,27 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function scrollPageToBottomSmooth(): void {
+  const scrollToBottom = (): void => {
+    const scrollingElement =
+      document.scrollingElement ?? document.documentElement ?? document.body;
+    const targetTop = Math.max(0, scrollingElement.scrollHeight - window.innerHeight);
+
+    window.scrollTo({
+      top: targetTop,
+      behavior: "smooth",
+    });
+  };
+
+  scrollToBottom();
+
+  requestAnimationFrame(() => {
+    scrollToBottom();
+    window.setTimeout(scrollToBottom, 160);
+    window.setTimeout(scrollToBottom, 420);
+  });
+}
+
 function App() {
   const [eloInput, setEloInput] = useState("1500");
   const [botMoveThresholdInput, setBotMoveThresholdInput] = useState("10");
@@ -471,6 +481,12 @@ function App() {
   const [openingSearch, setOpeningSearch] = useState("");
   const [openingDropdownOpen, setOpeningDropdownOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackStatusMessage, setFeedbackStatusMessage] = useState("");
+  const [feedbackStatusTone, setFeedbackStatusTone] = useState<"neutral" | "success" | "error">("neutral");
   const selectedSpeed: SpeedOption = "rapid";
 
   const [game, setGame] = useState(() => new Chess());
@@ -478,13 +494,14 @@ function App() {
   const [sessionConfig, setSessionConfig] = useState<SessionConfig | null>(null);
   const [botThinking, setBotThinking] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
-  const [status, setStatus] = useState("");
+  const [, setStatus] = useState("");
   const [lastBotMove, setLastBotMove] = useState<string>("");
   const [lastBotMoveRate, setLastBotMoveRate] = useState<number | null>(null);
   const [lastMoveReview, setLastMoveReview] = useState<MoveReview | null>(null);
   const [hintMove, setHintMove] = useState<RankedMove | null>(null);
   const [hintLoading, setHintLoading] = useState(false);
   const [brilliantToSquare, setBrilliantToSquare] = useState<Square | null>(null);
+  const [botRateTooltipOpen, setBotRateTooltipOpen] = useState(false);
   const [positionGames2000Plus, setPositionGames2000Plus] = useState<number | null>(null);
   const [positionGamesLoading, setPositionGamesLoading] = useState(false);
   const [moveCounter, setMoveCounter] = useState(0);
@@ -548,6 +565,11 @@ function App() {
     ...hintSquareStyles,
     ...brilliantSquareStyles,
   };
+  const hasBotMoveInfo = lastBotMove.length > 0 && lastBotMoveRate !== null;
+  const botMoveRatePercent = hasBotMoveInfo ? `${(lastBotMoveRate * 100).toFixed(1)}%` : "";
+  const botRateTooltipText = hasBotMoveInfo
+    ? `In this position, players in your elo will play ${lastBotMove} ${botMoveRatePercent} of the time.`
+    : "";
 
   const clearBrilliantHighlight = (): void => {
     if (brilliantHighlightTimeoutRef.current) {
@@ -683,6 +705,24 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!helpOpen && !feedbackOpen) {
+      return;
+    }
+
+    const handleEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        setHelpOpen(false);
+        setFeedbackOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [helpOpen, feedbackOpen]);
+
   const clearSessionState = (nextStatus: string): void => {
     sessionIdRef.current += 1;
     explorerDataCacheRef.current.clear();
@@ -770,6 +810,7 @@ function App() {
       setMoveHistoryUci(nextHistory);
       setLastBotMove(appliedMove.san);
       setLastBotMoveRate(selectedRate);
+      setBotRateTooltipOpen(false);
       setHintMove(null);
       const botColor = colorLabel(opponentColor(config.opening.userColor));
       const ratePct = (selectedRate * 100).toFixed(1);
@@ -938,6 +979,8 @@ function App() {
   };
 
   const startPractice = async (): Promise<void> => {
+    scrollPageToBottomSmooth();
+
     const config: SessionConfig = {
       opening: selectedOpening,
       elo: safeElo,
@@ -962,6 +1005,7 @@ function App() {
     setLastMoveReview(null);
     setHintMove(null);
     setHintLoading(false);
+    setBotRateTooltipOpen(false);
     clearBrilliantHighlight();
     setPositionGames2000Plus(null);
     setPositionGamesLoading(false);
@@ -1034,7 +1078,75 @@ function App() {
 
   const resetSession = (): void => {
     const hadSession = Boolean(sessionConfig) || moveHistoryUci.length > 0;
+    setBotRateTooltipOpen(false);
     clearSessionState(hadSession ? "Session ended." : "");
+  };
+
+  const openHelpDialog = (): void => {
+    setFeedbackOpen(false);
+    setHelpOpen(true);
+  };
+
+  const openFeedbackDialog = (): void => {
+    setHelpOpen(false);
+    setFeedbackStatusMessage("");
+    setFeedbackStatusTone("neutral");
+    setFeedbackOpen(true);
+  };
+
+  const submitFeedback = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+
+    const message = feedbackMessage.trim();
+    if (!message) {
+      setFeedbackStatusTone("error");
+      setFeedbackStatusMessage("Write a message before submitting.");
+      return;
+    }
+
+    setFeedbackSending(true);
+    setFeedbackStatusMessage("");
+    setFeedbackStatusTone("neutral");
+
+    try {
+      const response = await fetch(FEEDBACK_EMAIL_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          _subject: "ChessOpening.lol Feedback",
+          _captcha: "false",
+          message,
+          opening: selectedOpening.name,
+          elo: safeElo,
+          submittedAt: new Date().toISOString(),
+          source: window.location.href,
+        }),
+      });
+
+      type FeedbackResponse = { message?: string; success?: string };
+      const payload = (await response.json().catch(() => null)) as FeedbackResponse | null;
+
+      if (!response.ok) {
+        const detail =
+          payload && typeof payload.message === "string"
+            ? payload.message
+            : `Request failed with status ${response.status}.`;
+        throw new Error(detail);
+      }
+
+      setFeedbackStatusTone("success");
+      setFeedbackStatusMessage("Thanks. Your feedback was sent.");
+      setFeedbackMessage("");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown error.";
+      setFeedbackStatusTone("error");
+      setFeedbackStatusMessage(`Could not send feedback: ${detail}`);
+    } finally {
+      setFeedbackSending(false);
+    }
   };
 
   const undoLastAttempt = (): void => {
@@ -1094,10 +1206,11 @@ function App() {
     setHintLoading(false);
     setHintMove(null);
     clearBrilliantHighlight();
+    setBotRateTooltipOpen(false);
+    setLastBotMove("");
     setLastBotMoveRate(null);
     setMoveCounter((previous) => Math.max(0, previous - undoneUserMoves));
     setLastMoveReview(null);
-    setLastBotMove(getLastBotMoveSan(nextGame, opponentColor(sessionConfig.opening.userColor)));
 
     if (nextGame.isGameOver()) {
       setStatus(`Undid the last move. ${describeGameOver(nextGame)}`);
@@ -1159,6 +1272,9 @@ function App() {
     setMoveHistoryUci(nextHistory);
     setHintMove(null);
     clearBrilliantHighlight();
+    setBotRateTooltipOpen(false);
+    setLastBotMove("");
+    setLastBotMoveRate(null);
     setMoveCounter((previous) => previous + 1);
 
     void scoreUserMove(
@@ -1187,6 +1303,10 @@ function App() {
     moveHistoryUci.length > (sessionConfig?.opening.seedMoves.length ?? 0);
   const canReset = Boolean(sessionConfig) || moveHistoryUci.length > 0;
   const isGameRunning = Boolean(sessionConfig) && !game.isGameOver();
+  const isBoardSet =
+    Boolean(sessionConfig) &&
+    !isSeeding &&
+    moveHistoryUci.length >= (sessionConfig?.opening.seedMoves.length ?? 0);
   const reviewGradeClass =
     lastMoveReview?.grade === "!!"
       ? "grade-brilliant"
@@ -1222,29 +1342,139 @@ function App() {
     >
       <header className="top-bar">
         <h1>ChessOpening.lol</h1>
-        <button
-          type="button"
-          className="icon-control gear-control"
-          onClick={() => setSettingsOpen((previous) => !previous)}
-          aria-label="Toggle settings"
-        >
-          {settingsOpen ? (
-            <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M6 6L18 18M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          ) : (
-            <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M12 3L14 4L16.5 3.5L17.5 5.5L20 7L19.5 9.5L21 12L19.5 14.5L20 17L17.5 18.5L16.5 20.5L14 20L12 21L10 20L7.5 20.5L6.5 18.5L4 17L4.5 14.5L3 12L4.5 9.5L4 7L6.5 5.5L7.5 3.5L10 4L12 3Z"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinejoin="round"
-              />
-              <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-          )}
-        </button>
+        <div className="top-bar-actions">
+          <button
+            type="button"
+            className="top-feedback-control"
+            onClick={openFeedbackDialog}
+            aria-haspopup="dialog"
+            aria-expanded={feedbackOpen}
+          >
+            Give Feedback
+          </button>
+          <button
+            type="button"
+            className="icon-control top-help-control"
+            onClick={openHelpDialog}
+            aria-label="How to play"
+            aria-haspopup="dialog"
+            aria-expanded={helpOpen}
+          >
+            ?
+          </button>
+          <button
+            type="button"
+            className="icon-control gear-control"
+            onClick={() => setSettingsOpen((previous) => !previous)}
+            aria-label="Toggle settings"
+          >
+            {settingsOpen ? (
+              <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 6L18 18M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M12 3L14 4L16.5 3.5L17.5 5.5L20 7L19.5 9.5L21 12L19.5 14.5L20 17L17.5 18.5L16.5 20.5L14 20L12 21L10 20L7.5 20.5L6.5 18.5L4 17L4.5 14.5L3 12L4.5 9.5L4 7L6.5 5.5L7.5 3.5L10 4L12 3Z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinejoin="round"
+                />
+                <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+            )}
+          </button>
+        </div>
       </header>
+
+      {helpOpen ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setHelpOpen(false)}>
+          <section
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="how-to-play-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2 id="how-to-play-title" className="modal-title">
+                How It Works
+              </h2>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setHelpOpen(false)}
+                aria-label="Close help"
+              >
+                x
+              </button>
+            </div>
+            <ol className="help-steps">
+              <li>Pick the opening you want to practice from the opening list.</li>
+              <li>The bot replies with moves players in your Elo actually choose.</li>
+              <li>Your move is reviewed against top-player games in the same opening.</li>
+            </ol>
+          </section>
+        </div>
+      ) : null}
+
+      {feedbackOpen ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setFeedbackOpen(false)}>
+          <section
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="feedback-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2 id="feedback-title" className="modal-title">
+                Give Feedback
+              </h2>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setFeedbackOpen(false)}
+                aria-label="Close feedback"
+              >
+                x
+              </button>
+            </div>
+
+            <form className="feedback-form" onSubmit={(event) => void submitFeedback(event)}>
+              <label>
+                <span>Your message</span>
+                <textarea
+                  className="feedback-textarea"
+                  value={feedbackMessage}
+                  onChange={(event) => setFeedbackMessage(event.target.value)}
+                  placeholder="Tell us what would make this trainer better..."
+                  maxLength={2000}
+                  disabled={feedbackSending}
+                />
+              </label>
+
+              <span className={`feedback-status feedback-status-${feedbackStatusTone}`}>
+                {feedbackStatusMessage}
+              </span>
+
+              <div className="feedback-actions">
+                <button
+                  type="button"
+                  className="feedback-secondary"
+                  onClick={() => setFeedbackOpen(false)}
+                  disabled={feedbackSending}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="resume-control" disabled={feedbackSending}>
+                  {feedbackSending ? "Sending..." : "Submit"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
 
       {settingsOpen ? (
         <section className="settings-drawer">
@@ -1391,7 +1621,7 @@ function App() {
           <div className="action-buttons">
             <button
               type="button"
-              className="icon-control"
+              className="icon-control hint-control"
               onClick={requestHint}
               disabled={!canRequestHint}
               aria-label="Hint"
@@ -1409,7 +1639,9 @@ function App() {
             </button>
             <button
               type="button"
-              className={`icon-control ${lastMoveReview && lastMoveReview.playedRate < 0.04 ? "undo-highlight" : ""}`}
+              className={`icon-control undo-control ${
+                lastMoveReview && lastMoveReview.playedRate < 0.04 ? "undo-highlight" : ""
+              }`}
               onClick={undoLastAttempt}
               disabled={!canUndo}
               aria-label="Undo"
@@ -1427,7 +1659,7 @@ function App() {
             </button>
             <button
               type="button"
-              className="resume-control"
+              className="resume-control end-control"
               onClick={resetSession}
               disabled={!canReset}
               aria-label="End"
@@ -1437,7 +1669,7 @@ function App() {
             </button>
             <button
               type="button"
-              className="resume-control"
+              className="resume-control start-control"
               onClick={() => void startPractice()}
               disabled={controlsDisabled || isGameRunning}
             >
@@ -1466,24 +1698,37 @@ function App() {
             </ol>
           </div>
 
-          <div className="bot-side-panel">
-            <span className="bot-line-title">Bots move</span>
-            <strong className="bot-line-move">{lastBotMove || "-"}</strong>
-            <span className="bot-line-rate">
-              {lastBotMoveRate !== null
-                ? `Plays ${(lastBotMoveRate * 100).toFixed(1)}% at your elo`
-                : status || "Play to begin"}
-            </span>
-            <div className="position-accuracy">
-              <div className="position-accuracy-header">
-                <span className="position-accuracy-title">Position accuracy</span>
-                <strong className="position-accuracy-value">{positionAccuracyLabel}</strong>
+          <div className={`bot-side-panel ${isBoardSet ? "bot-side-panel-with-accuracy" : ""}`}>
+            {lastBotMove ? <strong className="bot-line-move">{lastBotMove}</strong> : null}
+            {hasBotMoveInfo ? (
+              <div className={`bot-line-rate-wrap ${botRateTooltipOpen ? "bot-line-rate-wrap-open" : ""}`}>
+                <span className="bot-line-rate">{botMoveRatePercent}</span>
+                <button
+                  type="button"
+                  className="bot-line-rate-help"
+                  aria-label="How this percentage is calculated"
+                  aria-expanded={botRateTooltipOpen}
+                  onClick={() => setBotRateTooltipOpen((open) => !open)}
+                >
+                  ?
+                </button>
+                <span className="bot-line-rate-tooltip" role="tooltip">
+                  {botRateTooltipText}
+                </span>
               </div>
-              <div className="position-accuracy-bar" aria-hidden="true">
-                <div className="position-accuracy-fill" style={positionAccuracyBarStyle} />
+            ) : null}
+            {isBoardSet ? (
+              <div className="position-accuracy">
+                <div className="position-accuracy-header">
+                  <span className="position-accuracy-title">Position accuracy</span>
+                  <strong className="position-accuracy-value">{positionAccuracyLabel}</strong>
+                </div>
+                <div className="position-accuracy-bar" aria-hidden="true">
+                  <div className="position-accuracy-fill" style={positionAccuracyBarStyle} />
+                </div>
+                <span className="position-accuracy-sample">{positionAccuracyGamesLabel}</span>
               </div>
-              <span className="position-accuracy-sample">{positionAccuracyGamesLabel}</span>
-            </div>
+            ) : null}
           </div>
         </div>
       </section>
