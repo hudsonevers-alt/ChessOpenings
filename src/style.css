@@ -743,11 +743,35 @@ body {
 
 @media (max-width: 880px) {
   .top-bar {
-    align-items: flex-start;
+    align-items: stretch;
+    gap: 0.55rem;
+  }
+
+  .top-bar h1 {
+    width: 100%;
   }
 
   .top-bar-actions {
-    justify-content: flex-end;
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    column-gap: 0.45rem;
+  }
+
+  .top-bar-actions .top-feedback-control {
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .top-bar-actions .top-help-control {
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  .top-bar-actions .gear-control {
+    grid-column: 3;
+    justify-self: end;
   }
 
   .settings-grid {
@@ -797,24 +821,21 @@ body {
   }
 
   .bot-side-panel {
-    align-self: stretch;
+    align-self: start;
     width: auto;
     position: relative;
     justify-items: end;
     text-align: right;
     min-width: 0;
-    grid-template-rows: auto auto 1fr;
+    grid-template-rows: auto auto;
   }
 
   .bot-side-panel-with-accuracy {
-    padding-bottom: 3.9rem;
+    padding-bottom: 0;
   }
 
   .position-accuracy {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    width: min(220px, 100%);
+    display: none;
   }
 
   .bot-line-rate-tooltip {
