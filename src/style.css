@@ -49,9 +49,19 @@ body {
   gap: 0.45rem;
 }
 
-.top-help-control {
+.top-bar-actions .top-help-control,
+.top-bar-actions .gear-control {
+  width: 2.2rem;
   min-width: 2.2rem;
+  height: 2.2rem;
   min-height: 2.2rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.top-help-control {
   font-size: 1.05rem;
   font-weight: 800;
 }
@@ -63,8 +73,13 @@ body {
   color: #163126;
   font: inherit;
   font-weight: 700;
+  height: 2.2rem;
   min-height: 2.2rem;
-  padding: 0.35rem 0.75rem;
+  padding: 0 0.75rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
 }
 
@@ -733,11 +748,6 @@ body {
 
   .top-bar-actions {
     justify-content: flex-end;
-  }
-
-  .top-feedback-control {
-    min-height: 2.1rem;
-    padding: 0.32rem 0.62rem;
   }
 
   .settings-grid {

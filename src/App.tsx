@@ -1411,6 +1411,7 @@ function App() {
             </div>
             <ol className="help-steps">
               <li>Pick the opening you want to practice from the opening list.</li>
+              <li>Press "Start" to begin your training.</li>
               <li>The bot replies with moves players in your Elo actually choose.</li>
               <li>Your move is reviewed against top-player games in the same opening.</li>
             </ol>
