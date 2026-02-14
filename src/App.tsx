@@ -569,7 +569,7 @@ function App() {
   const hasBotMoveInfo = lastBotMove.length > 0 && lastBotMoveRate !== null;
   const botMoveRatePercent = hasBotMoveInfo ? `${(lastBotMoveRate * 100).toFixed(1)}%` : "";
   const botRateTooltipText = hasBotMoveInfo
-    ? `In this position, players in your elo will play ${lastBotMove} ${botMoveRatePercent} of the time.`
+    ? `In this position, players in your elo will play ${lastBotMove} ${botMoveRatePercent} of the time. (Change your elo in settings)`
     : "";
 
   const clearBrilliantHighlight = (): void => {
