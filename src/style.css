@@ -49,6 +49,12 @@ body {
   gap: 0.45rem;
 }
 
+.top-bar-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 .top-bar-actions .top-help-control,
 .top-bar-actions .gear-control {
   width: 2.2rem;
@@ -661,6 +667,12 @@ body {
 
 .top-moves-list li {
   min-height: 1.2em;
+  white-space: nowrap;
+}
+
+.top-move-rate {
+  margin-left: 0.22rem;
+  white-space: nowrap;
 }
 
 .top-move-played {
@@ -743,6 +755,7 @@ body {
 
 @media (max-width: 880px) {
   .top-bar {
+    flex-direction: column;
     align-items: stretch;
     gap: 0.55rem;
   }
@@ -753,25 +766,22 @@ body {
 
   .top-bar-actions {
     width: 100%;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    display: flex;
     align-items: center;
-    column-gap: 0.45rem;
+    justify-content: space-between;
+    flex-wrap: nowrap;
   }
 
-  .top-bar-actions .top-feedback-control {
-    grid-column: 1;
-    justify-self: start;
+  .top-feedback-control {
+    flex: 0 1 auto;
+    max-width: calc(100% - 5.4rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .top-bar-actions .top-help-control {
-    grid-column: 2;
-    justify-self: end;
-  }
-
-  .top-bar-actions .gear-control {
-    grid-column: 3;
-    justify-self: end;
+  .top-bar-right-actions {
+    flex: 0 0 auto;
   }
 
   .settings-grid {

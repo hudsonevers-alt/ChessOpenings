@@ -516,6 +516,7 @@ function App() {
   const openingSearchResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const explorerDataCacheRef = useRef<Map<string, PreloadedExplorerData>>(new Map());
   const explorerRequestCacheRef = useRef<Map<string, Promise<PreloadedExplorerData>>>(new Map());
+  const botRateTooltipRef = useRef<HTMLDivElement | null>(null);
 
   const selectedOpening = OPENINGS.find((opening) => opening.id === selectedOpeningId) ?? OPENINGS[0];
   const filteredOpenings = OPENINGS.filter((opening) =>
@@ -722,6 +723,30 @@ function App() {
       window.removeEventListener("keydown", handleEscape);
     };
   }, [helpOpen, feedbackOpen]);
+
+  useEffect(() => {
+    if (!botRateTooltipOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent): void => {
+      const target = event.target as Node | null;
+      if (!target) {
+        return;
+      }
+
+      if (botRateTooltipRef.current?.contains(target)) {
+        return;
+      }
+
+      setBotRateTooltipOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [botRateTooltipOpen]);
 
   const clearSessionState = (nextStatus: string): void => {
     sessionIdRef.current += 1;
@@ -1352,38 +1377,40 @@ function App() {
           >
             Give Feedback
           </button>
-          <button
-            type="button"
-            className="icon-control top-help-control"
-            onClick={openHelpDialog}
-            aria-label="How to play"
-            aria-haspopup="dialog"
-            aria-expanded={helpOpen}
-          >
-            ?
-          </button>
-          <button
-            type="button"
-            className="icon-control gear-control"
-            onClick={() => setSettingsOpen((previous) => !previous)}
-            aria-label="Toggle settings"
-          >
-            {settingsOpen ? (
-              <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M6 6L18 18M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-            ) : (
-              <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path
-                  d="M12 3L14 4L16.5 3.5L17.5 5.5L20 7L19.5 9.5L21 12L19.5 14.5L20 17L17.5 18.5L16.5 20.5L14 20L12 21L10 20L7.5 20.5L6.5 18.5L4 17L4.5 14.5L3 12L4.5 9.5L4 7L6.5 5.5L7.5 3.5L10 4L12 3Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinejoin="round"
-                />
-                <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-            )}
-          </button>
+          <div className="top-bar-right-actions">
+            <button
+              type="button"
+              className="icon-control top-help-control"
+              onClick={openHelpDialog}
+              aria-label="How to play"
+              aria-haspopup="dialog"
+              aria-expanded={helpOpen}
+            >
+              ?
+            </button>
+            <button
+              type="button"
+              className="icon-control gear-control"
+              onClick={() => setSettingsOpen((previous) => !previous)}
+              aria-label="Toggle settings"
+            >
+              {settingsOpen ? (
+                <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M6 6L18 18M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M12 3L14 4L16.5 3.5L17.5 5.5L20 7L19.5 9.5L21 12L19.5 14.5L20 17L17.5 18.5L16.5 20.5L14 20L12 21L10 20L7.5 20.5L6.5 18.5L4 17L4.5 14.5L3 12L4.5 9.5L4 7L6.5 5.5L7.5 3.5L10 4L12 3Z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                  <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -1688,7 +1715,8 @@ function App() {
                     key={entry.uci}
                     className={lastMoveReview?.playedRank === entry.rank ? "top-move-played" : undefined}
                   >
-                    {entry.san} ({formatRate(entry.rate)})
+                    <span className="top-move-san">{entry.san}</span>
+                    <span className="top-move-rate">({formatRate(entry.rate)})</span>
                   </li>
                 ) : (
                   <li key={`placeholder-${index}`} className="top-move-placeholder">
@@ -1702,7 +1730,10 @@ function App() {
           <div className={`bot-side-panel ${isBoardSet ? "bot-side-panel-with-accuracy" : ""}`}>
             {lastBotMove ? <strong className="bot-line-move">{lastBotMove}</strong> : null}
             {hasBotMoveInfo ? (
-              <div className={`bot-line-rate-wrap ${botRateTooltipOpen ? "bot-line-rate-wrap-open" : ""}`}>
+              <div
+                ref={botRateTooltipRef}
+                className={`bot-line-rate-wrap ${botRateTooltipOpen ? "bot-line-rate-wrap-open" : ""}`}
+              >
                 <span className="bot-line-rate">{botMoveRatePercent}</span>
                 <button
                   type="button"
